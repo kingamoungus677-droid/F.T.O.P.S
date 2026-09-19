@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Continue'
 
 
 
-# F.T.O.P.S: A script that provides security checks, runs the extra parameters so that you are secured, and adds a furry wallpaper to your background. you can obviously keep it or not
+# F.T.O.P.S: A script that provides security checks, runs the extra parameters so that you are secured, and adds a furry wallpaper to your background. you can obviously keep it or not. THE STARTUP REPAIR UPDATE!!!
 $wallpaperFolder = Join-Path $env:USERPROFILE 'Pictures\FPD-Furry-Wallpapers'
 $bmpFolder = Join-Path $wallpaperFolder 'bmp'
 $scanFolder = Join-Path $env:USERPROFILE 'Downloads'
