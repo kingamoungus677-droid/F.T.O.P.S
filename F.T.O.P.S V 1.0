@@ -1,8 +1,10 @@
 $ErrorActionPreference = 'Continue'
 
 
-
+#THIS IS ONLY FOR WINDOWS POWERSHELL! LINUX IS BEING DEVELOPED AS WELL AS STARTUP REPAIRS!!!!
 # F.T.O.P.S: A script that provides security checks, runs the extra parameters so that you are secured, and adds a furry wallpaper to your background. you can obviously keep it or not
+Start-Sleep -Seconds 2
+
 $wallpaperFolder = Join-Path $env:USERPROFILE 'Pictures\FPD-Furry-Wallpapers'
 $bmpFolder = Join-Path $wallpaperFolder 'bmp'
 $scanFolder = Join-Path $env:USERPROFILE 'Downloads'
