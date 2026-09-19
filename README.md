@@ -117,8 +117,7 @@ Clear-Host
 Write-Host $bootPaw -ForegroundColor Magenta
 Rainbow 'F.T.O.P.S PATROL — Fur Team Online Protection Services'
 Start-Sleep -Seconds 2
-# The first paw icon/boot phase lasts five seconds. The later phases deliberately
-# advance more slowly to make the patrol sequence more theatrical.
+
 for ($i = 1; $i -le 5; $i++) {
    Write-Progress -Activity 'PHASE 1/3 — PAW BOOT-(this might take some time, hold on to your tail pup)' -Status '🐾 Loading Pawtection Core...' -PercentComplete ($i * 20)
    Paw '[PHASE 1/3 — PAW BOOT-(I love that smile on your face pup)] Furry security systems loading...' 'Magenta'
@@ -226,7 +225,7 @@ if ($duplicates) {
 
 
 
-# These open the same three community resources from the original script.
+# These open the same 6 community resources.
 Start-Process 'https:/sofurry.com/'
 Start-Process 'https:/en.wikifur.com/'
 Start-Process 'https:/FurryCons.com/'
