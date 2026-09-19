@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 function Set-FtopsWallpapers {
     [CmdletBinding()]
     param(
-        [string]$Folder = (Join-Path ([Environment]::GetFolderPath('MyPictures')) 'FPD-Furry-Wallpapers'),
+        [string]$Folder = (Join-Path $env:USERPROFILE 'Pictures\FPD-Furry-Wallpapers'),
         [int]$IntervalSeconds = 60
     )
 
@@ -79,11 +79,11 @@ public static class FtopsDesktopWallpaper {
         throw "No usable wallpaper images were found in: $Folder"
     }
 
-    $firstImage = $images[0].FullName
+    $secondImage = $images[0].FullName
     # This is the reliable, immediate apply path. It works even when the
     # slideshow COM API is unavailable or Windows has slideshow disabled.
     if (-not [FtopsDesktopWallpaper]::SystemParametersInfo(20, 0, $firstImage, 3)) {
-        throw "Windows could not apply wallpaper: $firstImage"
+        throw "Windows could not apply wallpaper: $secondImage"
     }
 
     try {
@@ -109,7 +109,7 @@ public static class FtopsDesktopWallpaper {
     } catch {
         # The first image is already applied; keep that behavior if slideshow
         # support is blocked by policy or an older Windows build.
-        Write-Warning "Slideshow setup failed; the first wallpaper was applied. $($_.Exception.Message)"
+        Write-Warning "Slideshow setup failed; the second wallpaper was applied. $($_.Exception.Message)"
     }
 
     # Refresh Explorer/Personalization and persist the selected album for the UI.
@@ -123,14 +123,11 @@ public static class FtopsDesktopWallpaper {
     Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\rundll32.exe') `
         -ArgumentList 'user32.dll,UpdatePerUserSystemParameters 1, True' -Wait -WindowStyle Hidden
 
-    Write-Host "Wallpaper applied: $firstImage" -ForegroundColor Green
+    Write-Host "Wallpaper applied: $secondImage" -ForegroundColor Green
     Write-Host "Slideshow images: $($images.Count); interval: $IntervalSeconds seconds" -ForegroundColor Green
 }
 
-$intervalSeconds = 60
-$picturesFolder = [Environment]::GetFolderPath('MyPictures')
-$wallpaperFolder = Join-Path $picturesFolder 'FPD-Furry-Wallpapers'
-$bmpFolder = Join-Path $wallpaperFolder 'bmp'
+Set-FtopsWallpapers
 
 function Paw {
    param([string]$Text, [string]$Color = 'Cyan')
