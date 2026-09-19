@@ -2,8 +2,7 @@ $ErrorActionPreference = 'Continue'
 
 
 
-# FPD Wallpaper Patrol: downloads the listed wallpapers, runs the requested checks,
-# converts usable images to BMP, then rotates them until Ctrl+C is pressed.
+# F.T.O.P.S: A script that provides security checks, runs the extra parameters so that you are secured, and adds a furry wallpaper to your background. you can obviously keep it or not
 $wallpaperFolder = Join-Path $env:USERPROFILE 'Pictures\FPD-Furry-Wallpapers'
 $bmpFolder = Join-Path $wallpaperFolder 'bmp'
 $scanFolder = Join-Path $env:USERPROFILE 'Downloads'
@@ -435,4 +434,4 @@ Start-Sleep -Seconds 4
 
 
 
-# The settings above apply immediately, This is still currently under development! Have a fluffy day!!!!
+# The settings above apply immediately, This is still currently under development (Adding a Startup repair soon, incase you get hacked or your files are corrupted!) Have a fluffy day!!!!
