@@ -1,185 +1,81 @@
 $ErrorActionPreference = 'Continue'
-#THIS IS ONLY FOR WINDOWS POWERSHELL! LINUX IS BEING DEVELOPED AS WELL AS STARTUP REPAIRS!!!!
-# F.T.O.P.S: A script that provides security checks, runs the extra parameters so that you are secured, and adds a furry wallpaper to your background. you can obviously keep it or not
-Start-Sleep -Seconds 2
+# THIS IS ONLY FOR WINDOWS POWERSHELL!
 
-# Applies the downloaded F.T.O.P.S wallpapers to the current Windows desktop.
-# Run this from the same PowerShell session as the main script, or dot-source it.
+# --- DEFINE REQUIRED PATHS ---
+$wallpaperFolder = Join-Path $env:USERPROFILE 'Pictures\FPD-Furry-Wallpapers'
+$bmpFolder       = Join-Path $env:USERPROFILE 'Pictures\FPD-Furry-Wallpapers\BMP'
+$scanFolder      = Join-Path $env:USERPROFILE 'Downloads'
 
-$ErrorActionPreference = 'Stop'
+# --- DEFINE YOUR IMAGE URLS HERE ---
+$urls = @(
+    "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRouj0gv1XMNOShR9MgLwoXbsCJqpFFC44uUK1AxcOgpQ&s=10.jpeg",
+    "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQu144SO4KuTDq5BaLLiESkBgsZEA8meLvuCdzChIawaw&s=10.jpeg",
+    "https://miro.medium.com/v2/resize:fit:720/format:webp/1*EO2BJYA4Z5uqA3VCcJN-Tw.jpeg"
+    "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTV1muN4IzLhLtX7tp5i8--VRACjYRvyUO_SYnn0AkieA&s=10.jpeg"
+    "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRHXuaJpLaORI9ISARrkJOLAdOgV91vCD1F1TWXqjlTDQ&s=10.jpeg"
+    "https://t.furaffinity.net/66418202@300-1789845041.jpg"
+)
 
-function Set-FtopsWallpapers {
-    [CmdletBinding()]
-    param(
-        [string]$Folder = (Join-Path $env:USERPROFILE 'Pictures\FPD-Furry-Wallpapers'),
-        [int]$IntervalSeconds = 60
-    )
-
-    if (-not (Test-Path -LiteralPath $Folder -PathType Container)) {
-        throw "Wallpaper folder does not exist: $Folder"
-    }
-
-    Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-
-public static class FtopsDesktopWallpaper {
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    public static extern bool SystemParametersInfo(
-        uint action, uint parameter, string value, uint updateIniFile);
-
-    [ComImport, Guid("B92B56A9-8B55-4E14-9A89-0199BBB6F93B"),
-     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    public interface IDesktopWallpaper {
-        void SetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string monitorId,
-                          [MarshalAs(UnmanagedType.LPWStr)] string wallpaper);
-        IntPtr GetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string monitorId);
-        IntPtr GetMonitorDevicePathAt(uint monitorIndex);
-        uint GetMonitorDevicePathCount();
-        void GetMonitorRECT([MarshalAs(UnmanagedType.LPWStr)] string monitorId, IntPtr displayRect);
-        void SetBackgroundColor(uint color);
-        uint GetBackgroundColor();
-        void SetPosition(int position);
-        int GetPosition();
-        void SetSlideshow(IntPtr items);
-        IntPtr GetSlideshow();
-        void SetSlideshowOptions(uint options, uint slideshowTick);
-        void GetSlideshowOptions(out uint options, out uint slideshowTick);
-        void AdvanceSlideshow([MarshalAs(UnmanagedType.LPWStr)] string monitorId, int direction);
-        int GetStatus();
-        void Enable([MarshalAs(UnmanagedType.Bool)] bool enable);
-    }
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
-    public static extern int SHCreateShellItemArrayFromPaths(
-        string[] paths, uint attributes, ref Guid riid, out IntPtr array);
-
-    public static readonly Guid ShellItemArrayIid =
-        new Guid("B63EA76D-1F85-456F-A19C-48159EFA858B");
-    public static readonly Guid DesktopWallpaperClsid =
-        new Guid("C2CF3110-460E-4FC1-B9D0-8A1C0C9CC4BD");
-}
-'@ -ErrorAction SilentlyContinue
-
-    $images = @(Get-ChildItem -LiteralPath $Folder -File |
-        Where-Object { $_.Extension -match '^\.(jpg|jpeg|png|bmp)$' } |
-        Sort-Object Name)
-
-    # Include converted images too. The old script created these in a subfolder,
-    # but then never supplied them to Windows' slideshow API.
-    $bmpFolder = Join-Path $Folder 'bmp'
-    if (Test-Path -LiteralPath $bmpFolder -PathType Container) {
-        $images += @(Get-ChildItem -LiteralPath $bmpFolder -File |
-            Where-Object { $_.Extension -match '^\.bmp$' } |
-            Sort-Object Name)
-    }
-    $images = @($images | Select-Object -Unique -Property FullName)
-
-    if ($images.Count -eq 0) {
-        throw "No usable wallpaper images were found in: $Folder"
-    }
-
-    $secondImage = $images[0].FullName
-    # This is the reliable, immediate apply path. It works even when the
-    # slideshow COM API is unavailable or Windows has slideshow disabled.
-    if (-not [FtopsDesktopWallpaper]::SystemParametersInfo(20, 0, $firstImage, 3)) {
-        throw "Windows could not apply wallpaper: $secondImage"
-    }
-
-    try {
-        $array = [IntPtr]::Zero
-        $iid = [FtopsDesktopWallpaper]::ShellItemArrayIid
-        $hr = [FtopsDesktopWallpaper]::SHCreateShellItemArrayFromPaths(
-            [string[]]$images.FullName, 0, [ref]$iid, [ref]$array)
-        if ($hr -lt 0) { [Runtime.InteropServices.Marshal]::ThrowExceptionForHR($hr) }
-
-        try {
-            $desktop = [Activator]::CreateInstance(
-                [type]::GetTypeFromCLSID([FtopsDesktopWallpaper]::DesktopWallpaperClsid))
-            try {
-                $desktop.SetSlideshow($array)
-                $desktop.SetSlideshowOptions(0, [uint32]([Math]::Max(1, $IntervalSeconds) * 1000))
-                $desktop.AdvanceSlideshow($null, 0)
-            } finally {
-                [Runtime.InteropServices.Marshal]::ReleaseComObject($desktop) | Out-Null
-            }
-        } finally {
-            if ($array -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::Release($array) | Out-Null }
-        }
-    } catch {
-        # The first image is already applied; keep that behavior if slideshow
-        # support is blocked by policy or an older Windows build.
-        Write-Warning "Slideshow setup failed; the second wallpaper was applied. $($_.Exception.Message)"
-    }
-
-    # Refresh Explorer/Personalization and persist the selected album for the UI.
-    $desktopKey = 'HKCU:\Control Panel\Desktop'
-    Set-ItemProperty -Path $desktopKey -Name WallpaperStyle -Value '10'
-    Set-ItemProperty -Path $desktopKey -Name TileWallpaper -Value '0'
-    $wallpaperKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers'
-    New-Item -Path $wallpaperKey -Force | Out-Null
-    New-ItemProperty -Path $wallpaperKey -Name BackgroundType -PropertyType DWord -Value 2 -Force | Out-Null
-    New-ItemProperty -Path $wallpaperKey -Name SlideshowDirectoryPath -PropertyType String -Value $Folder -Force | Out-Null
-    Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\rundll32.exe') `
-        -ArgumentList 'user32.dll,UpdatePerUserSystemParameters 1, True' -Wait -WindowStyle Hidden
-
-    Write-Host "Wallpaper applied: $secondImage" -ForegroundColor Green
-    Write-Host "Slideshow images: $($images.Count); interval: $IntervalSeconds seconds" -ForegroundColor Green
-}
-
-Set-FtopsWallpapers
+Start-Sleep -Seconds 0.5
 
 function Paw {
-   param([string]$Text, [string]$Color = 'Cyan')
-   Write-Host "🐾  $Text" -ForegroundColor $Color
+    param([string]$Text, [string]$Color = 'Cyan')
+    Write-Host "🐾  $Text" -ForegroundColor $Color
 }
+
 function Rainbow {
-   param([string]$Text)
-   $colors = @('Cyan', 'Blue', 'Magenta', 'Red', 'Yellow', 'Green')
-   for ($i = 0; $i -lt $Text.Length; $i++) {
-       Write-Host $Text[$i] -NoNewline -ForegroundColor $colors[$i % $colors.Count]
-   }
-   Write-Host
+    param([string]$Text)
+    $colors = @('Cyan', 'Blue', 'Magenta', 'Red', 'Yellow', 'Green')
+    for ($i = 0; $i -lt $Text.Length; $i++) {
+        Write-Host $Text[$i] -NoNewline -ForegroundColor $colors[$i % $colors.Count]
+    }
+    Write-Host
 }
+
 function Start-MicrosoftAccountSecurityCheck {
-   Paw 'Opening the official Microsoft Account Security page...' 'Yellow'
-   Paw 'Sign in to review recent activity, unfamiliar sign-ins, and security alerts.' 'Cyan'
-   Paw 'This does not read email or passwords; only the account owner can review account data after signing in.' 'Cyan'
-   Start-Process 'https://account.microsoft.com/security'
+    Paw 'Opening the official Microsoft Account Security page...' 'Yellow'
+    Paw 'Sign in to review recent activity, unfamiliar sign-ins, and security alerts.' 'Cyan'
+    Paw 'This does not read email or passwords; only the account owner can review account data after signing in.' 'Cyan'
+    Start-Process 'https://account.microsoft.com/security'
 }
+
 function Type-Text {
-   param(
-       [string]$Text,
-       [string]$Color = 'Yellow',
-       [int]$DelayMilliseconds = 15
-   )
-   foreach ($character in $Text.ToCharArray()) {
-       if ($character -eq "`r") { continue }
-       if ($character -eq "`n") { Write-Host }
-       else { Write-Host $character -NoNewline -ForegroundColor $Color }
-       Start-Sleep -Milliseconds $DelayMilliseconds
-   }
-   Write-Host
+    param(
+        [string]$Text,
+        [string]$Color = 'Yellow',
+        [int]$DelayMilliseconds = 15
+    )
+    foreach ($character in $Text.ToCharArray()) {
+        if ($character -eq "`r") { continue }
+        if ($character -eq "`n") { Write-Host }
+        else { Write-Host $character -NoNewline -ForegroundColor $Color }
+        Start-Sleep -Milliseconds $DelayMilliseconds
+    }
+    Write-Host
 }
+
 Clear-Host
 Type-Text @'
 Do you want to start this process? If you do, this means you agree to us deleting duplicate and bad files, downloading necessary files to run this Defender program, and briefly
 changing your wallpaper or not if you don’t wanna. It will also open Your Microsoft Account (aka Outlook) so you can
 check for breaches or unfamiliar-sign-in detections tied to your email account.
+
 Email threat checking only works if you are signed in to Outlook.
 This script does not read your email or passwords; only you can review protected
-account information. We DO NOT want to know any of your private businesses and nor do we get to see what you have personalized. It is COMPLETELY under the ai’s job to check for breached emails, we a[...]
-'@ 'Yellow' 32
+account information. We DO NOT want to know any of your private businesses and nor do we get to see what you have personalized. It is COMPLETELY under the ai’s job to check for breached emails, We do not get any notifications from your device. With that said. Have a fluffy day pup.
+'@ 'Yellow' 6
+
 $consent = Read-Host 'Type Yes to continue, or No to cancel'
 if ($consent -notmatch '^(?i:y|yes)$') {
-   Write-Host 'FPD Wallpaper Patrol was cancelled. No downloads or system changes were made.' -ForegroundColor Cyan
-   exit 0
+    Paw 'Operation canceled by user.' 'Yellow'
+    exit
 }
+
 $bootPaw = @'
-⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⣀⠀⠀⠀⠀⠀⠘⡏⠓⢄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠘⡏⠑⢤⣀⠀⠀⠀⠘⢦⠀⠉⠒⠤⢄⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠸⡄⠀⠈⠉⠒⠢⠤⢀⣳⣄⠀⠀⠀⠀⠉⠉⠑⠒⠒⠤⠤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠸⡄⠀⠈⠉⠒⠢⠤⢀⣳⣄⠀⠀⠀⠀⠉⠉⠑⠒⠒⠤⠤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠹⡄⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠉⠐⠒⠠⢄⡀⠀⢀⠀⠀⠉⠲⢤⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠘⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠛⢟⠉⠙⠛⢶⣶⡿⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠈⢦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢻⣦⠀⠀⠀⠉⠛⠢⢄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
@@ -192,7 +88,7 @@ $bootPaw = @'
 ⢰⡷⠁⠀⡤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⣉⠉⠁⠈⢉⡴⠋⠀⠀⠀⠀⠰⣤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢦⡀⠙⡆
 ⢸⠃⢀⡞⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠉⠉⠉⠉⠒⠦⡀⠀⠀⠀⠈⠉⠲⡄⢀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⡇⢰⠃
 ⢸⣤⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠤⢤⣉⠲⣿⣆⠀⠀⠀⠀⠀⠙⠹⣄⠤⠆⠀⠀⡀⠀⠀⠀⠀⡽⠃⠀
-⠸⡇⡜⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢾⣿⠗⠤⣀⠀⠀⠀⠀⠀⠀⠓⠒⠻⣍⠢⣀⣤⠞⠀⠀⠀
+⠸⡇⡜⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢾⣿⠗⠤⣀⠀⠀⠀⠀⠀⠀⠀⠓⠒⠻⣍⠢⣀⣤⠞⠀⠀⠀
 ⠀⠀⣷⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢻⣧⡀⠀⠉⠒⠠⣄⡀⠀⠀⠀⠀⢀⡷⡌⣧⠀⠀⠀⠀
 ⠀⠀⢸⡀⠀⠀⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢿⣿⠇⠀⠀⠀⠀⢨⣿⡷⠶⠶⠿⠋⠀⠸⡿⠀⠀⠀⠀
 ⠀⠀⠀⢧⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⡏⠀⠀⠀⠐⢦⠀⠙⢿⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
@@ -209,91 +105,91 @@ Clear-Host
 Write-Host $bootPaw -ForegroundColor Magenta
 Rainbow 'F.T.O.P.S PATROL — Fur Team Online Protection Services'
 Start-Sleep -Seconds 2
+
 for ($i = 1; $i -le 5; $i++) {
-   Write-Progress -Activity 'PHASE 1/3 — PAW BOOT-(this might take some time, hold on to your tail pup)' -Status '🐾 Loading Pawtection Core...' -PercentComplete ($i * 20)
-   Paw '[PHASE 1/3 — PAW BOOT-(I love that smile on your face pup)] Furry security systems loading...' 'Magenta'
-   Start-Sleep -Seconds 2
+    Write-Progress -Activity 'PHASE 1/3 — PAW BOOT-(this might take some time, hold on to your tail pup)' -Status '🐾 Loading Pawtection Core...' -PercentComplete ($i * 20)
+    Paw '[PHASE 1/3 — PAW BOOT-(I love that smile on your face pup)] Furry security systems loading...' 'Magenta'
+    Start-Sleep -Seconds 2
 }
 for ($i = 1; $i -le 10; $i++) {
-   Write-Progress -Activity 'PHASE 2/3 — FLUFF FIREWALL-(Your quite cool for letting us do this, good pup)' -Status '🐾 Calibrating floof firewall...' -PercentComplete ($i * 10)
-   Paw '[PHASE 2/3 — FLUFF FIREWALL-(Hru today pup?)] Furry security systems loading...' 'Magenta'
-   Start-Sleep -Seconds 4
+    Write-Progress -Activity 'PHASE 2/3 — FLUFF FIREWALL-(Your quite cool for letting us do this, good pup)' -Status '🐾 Calibrating floof firewall...' -PercentComplete ($i * 10)
+    Paw '[PHASE 2/3 — FLUFF FIREWALL-(Hru today pup?)] Furry security systems loading...' 'Magenta'
+    Start-Sleep -Seconds 4
 }
 for ($i = 1; $i -le 10; $i++) {
-   Write-Progress -Activity 'PHASE 3/3 — F.T.O.P.S RESPONSE-(Did you know that more movies are becoming furry like?)' -Status '🐾 Preparing F.T.O.P.S response...' -PercentComplete ($i * 10)
-   Paw '[PHASE 3/3 — F.T.O.P.S RESPONSE] Furry security systems loading...' 'Magenta'
-   Start-Sleep -Seconds 1
+    Write-Progress -Activity 'PHASE 3/3 — F.T.O.P.S RESPONSE-(Did you know that more movies are becoming furry like?)' -Status '🐾 Preparing F.T.O.P.S response...' -PercentComplete ($i * 10)
+    Paw '[PHASE 3/3 — F.T.O.P.S RESPONSE] Furry security systems loading...' 'Magenta'
+    Start-Sleep -Seconds 1
 }
 Write-Progress -Activity 'F.T.O.P.S Boot' -Completed
 Start-Sleep -Seconds 1
+
 New-Item -ItemType Directory -Force -Path $wallpaperFolder, $bmpFolder | Out-Null
 Add-Type -AssemblyName System.Drawing
-$urls = @(
-   'https://tse4.mm.bing.net/th/id/OIP.xnMkw0BlXjkNA-UI9XGb2wHaQd?r=0&rs=1&pid=ImgDetMain&o=7&rm=3',
-   'https://th.bing.com/th/id/OIP.88cgGTKzwTJ6VjZ2Q15k3AHaHa?w=170&h=180&c=7&r=0&o=7&pid=1.7&rm=3',
-   'https://th.bing.com/th/id/OIP.D8aEa5SxTWc0E_NZofnxIQHaHC?w=192&h=184&c=7&r=0&o=7&pid=1.7&rm=3',
-   'https://th.bing.com/th/id/OIP.xC7dHxbazYqTqJIdYUFH_AHaHZ?w=183&h=182&c=7&r=0&o=7&pid=1.7&rm=3'
-)
+
 for ($i = 0; $i -lt $urls.Count; $i++) {
-   $file = Join-Path $wallpaperFolder "furry-paw-$($i + 1).jpg"
-   $temporaryFile = "$file.download"
-   Paw "Downloading wallpaper $($i + 1) of $($urls.Count)..." 'Yellow'
-   try {
-       Remove-Item -LiteralPath $temporaryFile -Force -ErrorAction SilentlyContinue
-       Invoke-WebRequest -Uri $urls[$i] -OutFile $temporaryFile -ErrorAction Stop
-       # A Bing error page may still download successfully; opening it as an image
-       # ensures only actual wallpapers replace the existing file.
-       $testImage = [System.Drawing.Image]::FromFile($temporaryFile)
-       $testImage.Dispose()
-       Move-Item -LiteralPath $temporaryFile -Destination $file -Force
-       Paw "Wallpaper $($i + 1) downloaded and verified." 'Green'
-   } catch {
-       Remove-Item -LiteralPath $temporaryFile -Force -ErrorAction SilentlyContinue
-       Paw "Could not download a usable wallpaper $($i + 1): $($_.Exception.Message)" 'Yellow'
-   }
+    $file = Join-Path $wallpaperFolder "furry-paw-$($i + 1).jpg"
+    $temporaryFile = "$file.download"
+    Paw "Downloading wallpaper $($i + 1) of $($urls.Count)..." 'Yellow'
+    try {
+        Remove-Item -LiteralPath $temporaryFile -Force -ErrorAction SilentlyContinue
+        Invoke-WebRequest -Uri $urls[$i] -OutFile $temporaryFile -ErrorAction Stop
+        $testImage = [System.Drawing.Image]::FromFile($temporaryFile)
+        $testImage.Dispose()
+        Move-Item -LiteralPath $temporaryFile -Destination $file -Force
+        Paw "Wallpaper $($i + 1) downloaded to $wallpaperFolder and verified." 'Green'
+    } catch {
+        Remove-Item -LiteralPath $temporaryFile -Force -ErrorAction SilentlyContinue
+        Paw "Could not download wallpaper $($i + 1): $($_.Exception.Message)" 'Yellow'
+    }
 }
+
 Clear-Host
 for ($i = 1; $i -le 40; $i++) {
-   Write-Progress -Activity 'PHASE 4/4 — PAWTECTION CORE-(Whos a goodboy?)' -Status 'High-floof systems loading...' -PercentComplete (($i / 40) * 100)
-   if ($i % 5 -eq 0) { Rainbow "PAW SIGNAL STABLE — $([int](($i / 40) * 100))%" }
-   Start-Sleep -Seconds 2
+    Write-Progress -Activity 'PHASE 4/4 — PAWTECTION CORE-(Whos a goodboy?)' -Status 'High-floof systems loading...' -PercentComplete (($i / 40) * 100)
+    if ($i % 5 -eq 0) { Rainbow "PAW SIGNAL STABLE — $([int](($i / 40) * 100))%" }
+    Start-Sleep -Seconds 2
 }
 Write-Progress -Activity 'PHASE 4/4' -Completed
+
 if (Get-Command Start-MpScan -ErrorAction SilentlyContinue) {
-   Paw 'Starting a real Windows Defender quick scan...' 'Yellow'
-   Start-MpScan -ScanType QuickScan
-   Paw 'Defender quick scan has been started. Check Windows Security for results.' 'Green'
+    Paw 'Starting a real Windows Defender quick scan...' 'Yellow'
+    Start-MpScan -ScanType QuickScan
+    Paw 'Defender quick scan has been started. Check Windows Security for results.' 'Green'
 } else { Paw 'Defender scan command is unavailable.' 'Yellow' }
+
 try {
-   $firewall = (Get-NetFirewallProfile | Where-Object Enabled).Name -join ', '
-   $connections = @(Get-NetTCPConnection -State Established -ErrorAction SilentlyContinue).Count
-   Paw "Enabled firewall profiles: $firewall" 'Green'
-   Paw "Established TCP connections right now: $connections" 'Cyan'
+    $firewall = (Get-NetFirewallProfile | Where-Object Enabled).Name -join ', '
+    $connections = @(Get-NetTCPConnection -State Established -ErrorAction SilentlyContinue).Count
+    Paw "Enabled firewall profiles: $firewall" 'Green'
+    Paw "Established TCP connections right now: $connections" 'Cyan'
 } catch { Paw 'Network status check was unavailable.' 'Yellow' }
-# Microsoft account activity is protected behind the account owner's sign-in.
-# This opens the official review page; it does not attempt to collect credentials.
+
 Start-MicrosoftAccountSecurityCheck
+
 Paw 'Checking Downloads for exact duplicate files...' 'Yellow'
 $hashes = @{}
 Get-ChildItem -Path $scanFolder -File -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-   try {
-       $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256 -ErrorAction Stop).Hash
-       if (-not $hashes.ContainsKey($hash)) { $hashes[$hash] = @() }
-       $hashes[$hash] += $_.FullName
-   } catch { }
+    try {
+        $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256 -ErrorAction Stop).Hash
+        if (-not $hashes.ContainsKey($hash)) { $hashes[$hash] = @() }
+        $hashes[$hash] += $_.FullName
+    } catch { }
 }
+
 $duplicates = $hashes.GetEnumerator() | Where-Object { $_.Value.Count -gt 1 }
 if ($duplicates) {
-   Paw 'Duplicate files found:' 'Yellow'
-   $duplicates | ForEach-Object { $_.Value | ForEach-Object { Write-Host "  $_" } }
+    Paw 'Duplicate files found:' 'Yellow'
+    $duplicates | ForEach-Object { $_.Value | ForEach-Object { Write-Host "   $_" } }
 } else { Paw 'No exact duplicate files found in Downloads.' 'Green' }
-# These open the same 6 community resources.
-Start-Process 'https:/sofurry.com/'
-Start-Process 'https:/en.wikifur.com/'
-Start-Process 'https:/FurryCons.com/'
-Start-Process 'https:/furrynetwork.com/'
-Start-Process 'https:/furaffinity.net/'
-Start-Process 'https:/furtrack.com/'
+
+Start-Process 'https://sofurry.com/'
+Start-Process 'https://en.wikifur.com/'
+Start-Process 'https://FurryCons.com/'
+Start-Process 'https://furrynetwork.com/'
+Start-Process 'https://furaffinity.net/'
+Start-Process 'https://furtrack.com/'
+
 $finalPaw = @'
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣠⠄⠀⠀⠀⠀⢀⣠⣴⣶⠟⠁⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⢀⣴⣾⢛⡝⠁⠀⠀⠀⠀⠐⠿⢿⡼⠃⠀⠀⠀⠀⠀⢠⠀⠀
@@ -303,7 +199,7 @@ $finalPaw = @'
 ⠀⠀⣿⡿⣯⠛⠆⢀⣼⠇⠀⢻⣿⣿⡇⣁⣴⢟⣵⣿⣿⣿⣿⣿⡿⠀⠀⠀⠀⠀
 ⠀⠀⠈⠛⠶⠾⠿⠛⠁⠀⢀⣀⣈⣙⠛⠋⠁⣾⣿⣿⣿⠻⠉⣽⠃⠀⠀⠀⠀⣠
 ⠀⣀⣴⣶⣶⣦⣤⣤⣶⣾⣿⣿⣿⣿⣿⣶⡄⣿⣿⠏⠉⢀⣾⠃⠀⠀⢀⣠⣾⡟
-⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⠏⣿⡈⠛⠛⠛⢋⣡⣴⣶⣤⠹⣇⡾⠀
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⠏⣿⡈⠛⠛⠛⢋⣡⣴⣶⣤⠹⣇⡾⠀
 ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡉⢀⣿⠀⢀⣴⣿⣿⣿⣿⣿⣿⠀⠟⠀⠀
 ⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⠁⢸⡟⠀⣸⣿⣿⣿⢻⠏⣹⠏⠀⠀⠀⠀
 ⠘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⡀⠘⣿⡀⢹⡿⠃⠋⣀⡼⠋⠀⠀⠀⠀⠀
@@ -313,132 +209,79 @@ $finalPaw = @'
 '@
 Clear-Host
 Write-Host $finalPaw -ForegroundColor Magenta
-Write-Host '              Have a fluff-tastic day!' -ForegroundColor Green
+Write-Host '                Have a fluff-tastic day!' -ForegroundColor Green
 Start-Sleep -Seconds 2
-if (-not ('FpdSlideshow' -as [type])) {
-   Add-Type @'
+
+function Set-FtopsSlideshow {
+    [CmdletBinding()]
+    param(
+        [string]$Folder = $wallpaperFolder,
+        [int]$IntervalSeconds = 60
+    )
+
+    if (-not (Test-Path -LiteralPath $Folder -PathType Container)) {
+        Paw "Wallpaper folder does not exist: $Folder" 'Yellow'
+        return
+    }
+
+    $images = Get-ChildItem -LiteralPath $Folder -File | 
+        Where-Object { $_.Extension -match '^\.(jpg|jpeg|png|bmp)$' }
+
+    if ($images.Count -eq 0) {
+        Paw "No valid images found in $Folder" 'Yellow'
+        return
+    }
+
+    $wallpaperKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers'
+    if (-not (Test-Path $wallpaperKey)) { New-Item -Path $wallpaperKey -Force | Out-Null }
+
+    Set-ItemProperty -Path $wallpaperKey -Name BackgroundType -Value 2 -Type DWord
+    Set-ItemProperty -Path $wallpaperKey -Name SlideshowDirectoryPath -Value $Folder -Type String
+
+    $desktopKey = 'HKCU:\Control Panel\Desktop'
+    Set-ItemProperty -Path $desktopKey -Name WallpaperStyle -Value '10'
+    Set-ItemProperty -Path $desktopKey -Name TileWallpaper -Value '0'
+
+    $intervalMs = [Math]::Max(10000, $IntervalSeconds * 1000)
+    Set-ItemProperty -Path 'HKCU:\Control Panel\Personalization\Desktop Slideshow' -Name Interval -Value $intervalMs -Type DWord -ErrorAction SilentlyContinue
+
+    $firstImage = $images[0].FullName
+    $code = @'
 using System;
 using System.Runtime.InteropServices;
-[ComImport, Guid("B92B56A9-8B55-4E14-9A89-0199BBB6F93B"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IDesktopWallpaper {
-   void SetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string monitorId, [MarshalAs(UnmanagedType.LPWStr)] string wallpaper);
-   IntPtr GetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string monitorId);
-   IntPtr GetMonitorDevicePathAt(uint monitorIndex);
-   uint GetMonitorDevicePathCount();
-   void GetMonitorRECT([MarshalAs(UnmanagedType.LPWStr)] string monitorId, IntPtr displayRect);
-   void SetBackgroundColor(uint color);
-   uint GetBackgroundColor();
-   void SetPosition(int position);
-   int GetPosition();
-   void SetSlideshow(IntPtr items);
-   IntPtr GetSlideshow();
-   void SetSlideshowOptions(uint options, uint slideshowTick);
-   void GetSlideshowOptions(out uint options, out uint slideshowTick);
-   void AdvanceSlideshow([MarshalAs(UnmanagedType.LPWStr)] string monitorId, int direction);
-   int GetStatus();
-   void Enable([MarshalAs(UnmanagedType.Bool)] bool enable);
-}
-public static class FpdSlideshow {
-   private static readonly Guid ShellItemIid = new Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE");
-   private static readonly Guid DesktopWallpaperClsid = new Guid("C2CF3110-460E-4FC1-B9D0-8A1C0C9CC4BD");
-   [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
-   private static extern int SHCreateItemFromParsingName(string path, IntPtr bindContext, ref Guid riid, out IntPtr shellItem);
-   [DllImport("shell32.dll", PreserveSig = true)]
-   private static extern int SHCreateShellItemArrayFromShellItem(IntPtr shellItem, out IntPtr shellItemArray);
-   public static void Start(string folder, uint intervalMilliseconds) {
-       IntPtr folderItem = IntPtr.Zero;
-       IntPtr itemArray = IntPtr.Zero;
-       try {
-           Guid shellItemIid = ShellItemIid;
-           Marshal.ThrowExceptionForHR(SHCreateItemFromParsingName(folder, IntPtr.Zero, ref shellItemIid, out folderItem));
-           Marshal.ThrowExceptionForHR(SHCreateShellItemArrayFromShellItem(folderItem, out itemArray));
-           var desktop = (IDesktopWallpaper)Activator.CreateInstance(Type.GetTypeFromCLSID(DesktopWallpaperClsid));
-           desktop.SetSlideshow(itemArray);
-           desktop.SetSlideshowOptions(0, intervalMilliseconds); // 0 = no shuffle
-           desktop.AdvanceSlideshow(null, 0); // show the first image immediately
-           Marshal.ReleaseComObject(desktop);
-       }
-       finally {
-           if (itemArray != IntPtr.Zero) Marshal.Release(itemArray);
-           if (folderItem != IntPtr.Zero) Marshal.Release(folderItem);
-       }
-   }
+public class Wallpaper {
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
 }
 '@
+    Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue
+    [Wallpaper]::SystemParametersInfo(20, 0, $firstImage, 3) | Out-Null
+
+    Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\rundll32.exe') `
+        -ArgumentList 'user32.dll,UpdatePerUserSystemParameters 1, True' -Wait -WindowStyle Hidden
+
+    Write-Host "Slideshow enabled for folder: $Folder" -ForegroundColor Green
+    Write-Host "Total images: $($images.Count)" -ForegroundColor Green
 }
-$converted = @()
-Get-ChildItem -Path $wallpaperFolder -File | Where-Object { $_.Extension -match '^\.(jpg|jpeg|png)$' } | ForEach-Object {
-   try {
-       $image = [System.Drawing.Image]::FromFile($_.FullName)
-       $output = Join-Path $bmpFolder "$($_.BaseName).bmp"
-       $bitmap = [System.Drawing.Bitmap]::new($image)
-       $bitmap.Save($output, [System.Drawing.Imaging.ImageFormat]::Bmp)
-       $bitmap.Dispose()
-       $image.Dispose()
-       # Confirm the converted asset can be opened before putting it in rotation.
-       $verifiedBitmap = [System.Drawing.Image]::FromFile($output)
-       $verifiedBitmap.Dispose()
-       $converted += (Resolve-Path -LiteralPath $output).Path
-       Paw "Converted: $($_.Name)" 'Green'
-   } catch {
-       Paw "Could not convert $($_.Name)" 'Yellow'
-       if ($image) { $image.Dispose() }
-       if ($bitmap) { $bitmap.Dispose() }
-   }
-}
-try {
-    Set-FtopsWallpapers -Folder $wallpaperFolder -IntervalSeconds $intervalSeconds
-}
-catch {
-    Paw "Could not apply the wallpaper slideshow: $($_.Exception.Message)" 'Red'
-}
-$wallpaperImages = @(Get-ChildItem -Path $wallpaperFolder -File -ErrorAction SilentlyContinue |
-   Where-Object { $_.Extension -match '^\.(jpg|jpeg|png|bmp)$' })
-if ($wallpaperImages.Count -eq 0) {
-   Paw "No wallpaper images are directly inside: $wallpaperFolder" 'Red'
-   return
-}
-Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value '10'
-Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value '0'
-try {
-   # Configure the exact settings that the normal Windows Personalization page uses:
-   # BackgroundType 2 = Slideshow, with the selected album set to our wallpaper folder.
-   $slideshowSettings = 'HKCU:\Control Panel\Personalization\Desktop Slideshow'
-   $wallpaperSettings = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers'
-   New-Item -Path $slideshowSettings -Force | Out-Null
-   New-Item -Path $wallpaperSettings -Force | Out-Null
-   New-ItemProperty -Path $slideshowSettings -Name 'Interval' -PropertyType DWord -Value ([uint32]($intervalSeconds * 1000)) -Force | Out-Null
-   New-ItemProperty -Path $slideshowSettings -Name 'Shuffle' -PropertyType DWord -Value 0 -Force | Out-Null
-   New-ItemProperty -Path $wallpaperSettings -Name 'BackgroundType' -PropertyType DWord -Value 2 -Force | Out-Null
-   New-ItemProperty -Path $wallpaperSettings -Name 'SlideshowDirectoryPath' -PropertyType String -Value $wallpaperFolder -Force | Out-Null
-   New-ItemProperty -Path $wallpaperSettings -Name 'SlideshowDirectoryPath1' -PropertyType String -Value $wallpaperFolder -Force | Out-Null
-   # Ask Windows to reload the normal Personalization settings, then show them.
-   Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\rundll32.exe') -ArgumentList 'user32.dll,UpdatePerUserSystemParameters 1, True' -Wait
-   $backgroundType = (Get-ItemProperty -Path $wallpaperSettings -Name 'BackgroundType').BackgroundType
-   $album = (Get-ItemProperty -Path $wallpaperSettings -Name 'SlideshowDirectoryPath').SlideshowDirectoryPath
-   if ($backgroundType -ne 2 -or $album -ne $wallpaperFolder) { throw 'Windows did not retain the requested slideshow album.' }
-   Paw "Windows Background mode: Slideshow" 'Green'
-   Paw "Slideshow album selected: $wallpaperFolder" 'Green'
-   Paw "Wallpaper changes every $intervalSeconds seconds. Slideshow applied." 'Magenta'
-} catch {
-   Paw "Windows slideshow could not be enabled: $($_.Exception.Message)" 'Red'
-   Paw "Verified wallpapers are stored in: $wallpaperFolder" 'Yellow'
-}
+
+Set-FtopsSlideshow -IntervalSeconds 60
+Start-Sleep -Seconds 2
+
 $closingArt = @'
 ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠿⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠿⠟⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⣡⢶⣶⣶⡈⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣡⣾⣿⢋⢱⠈⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢠⢃⡆⢿⣿⣧⠈⣿⣿⣿⣿⣿⣿⣿⣿⠟⣰⣿⣿⠁⣼⡈⣧⡘⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢀⠃⣩⡑⡈⢿⣿⣇⠸⣿⣿⣿⣿⣿⣿⡟⢰⣿⣿⠏⣠⣆⠃⢹⣇⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⢃⡌⣴⣿⣷⡐⠘⣿⣿⡄⢿⣿⣿⣿⣿⣿⢁⣿⣿⡟⢰⣿⣿⣿⠘⣿⡈⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿⡃⣼⢡⡿⠟⣻⣿⠆⢻⣿⣷⠸⣿⣿⣿⣿⢃⣾⣿⣿⣇⢈⡄⠙⠛⡀⢹⡇⠛⠹⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⡿⡇⣇⠀⣿⢨⣂⣬⣤⣴⡇⣸⣿⣿⣦⠘⣿⣿⢁⣾⣿⠿⠿⢿⡈⠿⢿⢿⣿⡈⡟⣠⡇⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⢃⡌⣴⣿⣷⡐⠘⣿⣿⡄⢿⣿⣿⣿⣿⣿⣿⣿⡟⢰⣿⣿⣿⠘⣿⡈⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⡃⣼⢡⡿⠟⣻⣿⠆⢻⣿⣷⠸⣿⣿⣿⣿⣾⣿⣿⣇⢈⡄⠙⠛⡀⢹⡇⠛⠹⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⡿⡇⣇⠀⣿⢨⣂⣬⣤⣴⡇⣸⣿⣿⣦⠘⣿⣿⣾⣿⠿⠿⢿⡈⠿⢿⢿⣿⡈⡟⣠⡇⣿⣿⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⢰⡄⢻⣆⠹⠘⠿⠋⠁⠀⠀⠀⠀⠀⠀⠁⠈⠉⠈⠀⠀⠀⠀⠀⠀⠈⢈⡉⢿⣷⡰⣿⠃⢡⢀⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⡌⣿⣶⠟⣣⡀⠀⢴⡤⠀⠀⠀⠀⠀⠀⠀⠀⠄⠀⠀⠀⠀⠀⠀⠀⠀⠈⠛⠁⠈⠙⢷⣰⡟⣸⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⣧⠹⠁⠈⡁⠀⠀⡉⠁⠀⠀⠀⠀⣀⣠⣴⣾⣷⣴⣤⣤⣤⣤⣤⣤⣴⣾⣿⣦⣬⣿⡙⠿⠁⣿⣿⣿⡿⢿⣿
 ⣧⣬⡙⠤⣤⡖⣠⣴⣿⣷⡾⠨⠀⠀⡼⢿⣿⠁⣭⡉⢻⣿⣿⣿⣿⠟⣩⡍⠙⣿⣿⣿⣿⣿⣿⣿⣿⣷⣴⣶⣤⡤⢂⣼⣿
 ⣿⣿⣿⣧⣌⣉⠭⢉⣁⣠⣤⣤⠖⠁⠀⡀⢀⠁⠘⠃⣸⣿⣿⣿⣿⣈⡛⠁⣀⡂⠀⡠⠈⣿⣿⣿⡿⢿⣿⡿⢋⣴⣿⣿⣿
 ⣯⠙⣛⢛⣫⣵⣾⣿⣿⣿⣿⣿⠀⡇⠰⠠⣿⣧⠘⣿⣿⣿⣿⣿⣿⣿⠃⣼⣿⡇⢂⡁⢧⣽⣿⣿⣷⣌⠡⢶⣿⡿⠿⠟⣻
-⡟⣷⣌⣉⡡⠆⣼⣿⣿⣿⣿⣧⠀⡇⠀⣀⠸⠛⠀⢻⣿⣿⣿⣿⣿⡏⠀⠭⠩⢠⠄⣁⣾⣛⣿⣿⣿⣿⡿⠷⠖⣂⣥⣾⣿
+⣷⣌⣉⡡⠆⣼⣿⣿⣿⣿⣧⠀⡇⠀⣀⠸⠛⠀⢻⣿⣿⣿⣿⣿⡏⠀⠭⠩⢠⠄⣁⣾⣛⣿⣿⣿⣿⡿⠷⠖⣂⣥⣾⣿
 ⣧⡉⢭⣵⣶⣧⣀⣭⣽⣿⢿⣿⣿⣿⣶⣦⣭⣴⣤⠟⠛⠋⠙⠛⠻⣿⣶⣿⣷⣿⣿⣿⣿⣿⡿⣿⣿⣿⣓⠂⠩⠿⠿⣿⣿
 ⣿⣿⡶⣹⡀⠛⢿⣿⣿⣟⠈⣿⣿⡿⠿⣿⣿⣿⣿⠀⠀⠀⠀⠀⢀⣾⣿⣿⣿⣿⠿⠿⣿⣿⠁⢀⣿⣿⣿⣿⡍⠡⣾⣿⣿
 ⣟⠡⢞⡛⣻⣦⣽⣿⣿⣿⣦⠸⣿⣷⡀⠸⣿⣿⣿⣿⣷⡆⢰⣾⣿⣿⣿⣿⣿⠋⣤⣶⣿⠇⢠⣾⣿⣿⣿⣿⡇⢿⣿⣿⣿
@@ -448,20 +291,14 @@ $closingArt = @'
 ⣿⣿⣿⣿⣭⣐⡛⠿⢛⢋⣿⣿⣿⣆⠓⣶⣿⣿⣶⣦⣤⣤⣭⣽⣦⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠈⢷⣶⣿⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⣿⣿⣿⡟⣸⣿⣿⣿⠿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⢹⣿⣿⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⣿⣿⣟⣠⣛⣛⣛⣥⣾⢸⡟⠀⣿⣿⣿⣿⣿⢻⣿⠿⡻⢿⣿⣿⣿⡿⢿⣿⢛⣭⣶⣶⣾⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣆⠣⢠⠹⣿⣿⡟⣡⣆⣋⣸⣿⣆⢻⣿⠏⣴⡌⢿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣆⠣⢠⠹⣿⣿⡟⣡⣆⣋⣸⣿⣆⣿⠏⣴⡌⢿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣌⠛⢠⣴⣿⣿⣿⣿⣿⡄⢋⣾⣿⣿⣤⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣿⣿⣿⣿⣿⣿⣿⣇⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
 '@
 Clear-Host
 Write-Host $closingArt -ForegroundColor Magenta
-Rainbow 'Thank you for letting F.T.O.P.S to protect you!(The Best Boy! I know your watching)'
+Rainbow 'Thank you for letting F.T.O.P.S protect you! (The Best Boy! I know you are watching)'
 Start-Sleep -Seconds 4
-
-
-# --- STARTUP REPAIR & ESCALATED SYSTEM RECOVERY SECTION ---
-Clear-Host
-Paw "F.T.O.P.S SYSTEM MAINTENANCE & ADVANCED REPAIR" "Yellow"
-Write-Host
 
 # --- STARTUP REPAIR & ESCALATED SYSTEM RECOVERY SECTION ---
 Clear-Host
@@ -491,7 +328,6 @@ $repairConsent = Read-Host 'Do you want to proceed with full System Repair? (Typ
 if ($repairConsent -match '^(?i:y\vert{}yes)$') {
     Paw 'Elevating privileges for system recovery...' 'Yellow'
 
-    # Verify or request Administrator privileges
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
 
@@ -502,11 +338,8 @@ if ($repairConsent -match '^(?i:y\vert{}yes)$') {
             
             # PHASE 0: Pre-scan for Infected or Corrupted Files
             Write-Host '`n[STEP 0/6] Pre-scanning system for infected and corrupted files...' -ForegroundColor Cyan
-            
-            # Check image integrity status
             dism /online /cleanup-image /checkhealth
             
-            # Run Defender threat scan on memory and system boot files if Defender is active
             if (Get-Command Start-MpScan -ErrorAction SilentlyContinue) {
                 Write-Host 'Scanning active processes and system files for threats...' -ForegroundColor Gray
                 Start-MpScan -ScanType QuickScan
@@ -523,10 +356,7 @@ if ($repairConsent -match '^(?i:y\vert{}yes)$') {
             
             # PHASE 3: EFI Bootloader & BCD Rebuild
             Write-Host '`n[STEP 3/6] Repairing Bootloader & BCD Configuration...' -ForegroundColor Cyan
-            Write-Host 'Updating master boot code on all partitions...' -ForegroundColor Gray
             bootsect /nt60 ALL /force /mbr
-            
-            Write-Host 'Rebuilding BCD store from OS image using BCDBoot...' -ForegroundColor Gray
             bcdboot C:\Windows /l en-us /s C: /f ALL
             
             # PHASE 4: Disk Check
@@ -535,15 +365,15 @@ if ($repairConsent -match '^(?i:y\vert{}yes)$') {
             
             # EVALUATION & ESCALATION
             Write-Host '`n[EVALUATION] Checking system file repair status...' -ForegroundColor Yellow
-            $sfcCheck = sfc /scannow
+            \$sfcCheck = sfc /scannow
             
-            $systemRepaired = `$true
-            if (`$sfcCheck -like "*Windows Resource Protection found corrupt files and was unable to fix them*") {
-                $systemRepaired = `$false
+            \$systemRepaired = \$true
+            if (\$sfcCheck -like "*Windows Resource Protection found corrupt files and was unable to fix them*") {
+                \$systemRepaired = \$false
                 Write-Host '`n[STEP 5/6] System repair failed. Initiating System Reset Options...' -ForegroundColor Red
                 
-                $resetChoice = Read-Host 'Automated repairs failed. Do you want to initiate a System Reset / Factory Reset? (Type Y or N)'
-                if (`$resetChoice -match '^(?i:y\vert{}yes)$') {
+                \$resetChoice = Read-Host 'Automated repairs failed. Do you want to initiate a System Reset / Factory Reset? (Type Y or N)'
+                if (\$resetChoice -match '^(?i:y|yes)\$') {
                     Write-Host 'Launching Windows Reset System...' -ForegroundColor Red
                     systemreset -factoryreset
                 } else {
@@ -555,72 +385,72 @@ if ($repairConsent -match '^(?i:y\vert{}yes)$') {
                 Write-Host '`n🐾 System repairs completed successfully!' -ForegroundColor Green
             }
             
-            # FINAL FALLBACK SCREEN IF ALL AUTOMATED REPAIRS AND RESETS FAIL
-            if (-not `$systemRepaired) {
+            if (-not \$systemRepaired) {
                 Start-Sleep -Seconds 4
                 Clear-Host
                 
-                `$overwhelmedArt = @'
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠿⣛⣋⣭⣥⣶⣶⣶⣶⣶⣭⣭⣙⡻⠿⢿⣿⣿⣿⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⢛⣥⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣬⣝⡻⢿⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢋⣴⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢋⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢋⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ watershed⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿�[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢣⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣫⣶⣿⣿⣿⣿⣷⣦⣍⠻⣿⣿⣿⣿⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢣⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣣⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣮⡻⣿⣿⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢋⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣄⠻⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⠹⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢃⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠸��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠆��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢃⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⠏⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠏⣼⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢏⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⣸⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢣⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢰⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢞⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⣿⣿⣿⣿⣿⣿⣿⣿⣿⢇⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢛⣿⣿⣭⣵⣶⣶⣶⣶⣬⣭⣑⡘⠿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢸⣿⣿⣿⣿⣿⣿⣿⣿⡟⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣩⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⣿⣿⣿⣿⣿⣿⣿⣿⣿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢣⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⣿⣿⢏��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢠⣿⣿⣿⣿⣿⣿⣿⣿⡟⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣡⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢹⡿⣾⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢃⣾⣿⣿⣿⣿⣿⣿⣿⣿⢃⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⡌⣹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡴⡈⡇⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢃⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⢸⣿⣿⣿⣿⣿⣿⣿⣿⡿⢋⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣿⣿⣷⢰⣿��[...]
-Per⠉⠀⠀⠀⠈⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣱⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡏⣾⣿⣿⣿⣿⣿⣿⣿⣿⣷⣤⡍⣨⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢱⣿⣿⣿⢸⣿��[...]
-⠀⠀⢀⠠⠀⠀ panels⠀⠉⠛⠿⣿⣿⣿⣿⣿⣿⡿⠟⣋⣥⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠁⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡏⣿⣿⣿⣿⢸⣿�[...]
-⠀⠀⠀⢀⠀⠀⠀⠀⠀⠀⠀⢩⣭⣭⣥⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⢿⣿⣿⣿⡼⣿⣿⣿��[...]
-⠀⠀⠄⠀⡀⠄⠀⠀⠀⠁⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠘⣺⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠏⣤⣾⣧⣽⣿⣿⡇⣿��[...]
-⠀⠀⠁⢀⠀⠀⡀⠄⠀⠀⠀⠀⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⣫⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡏⡈⣿⣿⣿⣿⣿⣿⡇⢻��[...]
-⣷⣄⡀⠀⠠⠀⠀⢀⠀⠀⠠⠐⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢟⣋⣥⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⣇⣿⣿⣿⣿⣿⣿⡇⠈��[...]
-⣿⣿⣿⣷⣦⣄⣈⠀⠀⠠⠀⢀⣾⣿⣿⣿⣿⣿⣿⣿⠿⢛⣫⣥⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⠡⣿⣿⣿⣿⣿⣿⠇⣾��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣶⣦⣬⣭⣭⣭⣩⣭⣥⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡌⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣌⡙⡛⢛⣛⣡⡄⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⢸⣿⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡆⢿⡿⢟⣛⣫⣭⣿⣿⣭⣽⣛⡿⣿⡌⣿⣿⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣬⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣇⠻⣿⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢟⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⣁⣉⣡⢸��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢟⣥⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠏⣃⡘⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢋⣵⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋⠁⢤⣼��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢋⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⠉⠀⠀⠀⠀⠈⣩⣴⡀⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣡⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⢛⣡⠦⠟⣃⠲⠀⠀⣴⣿⣿⣿⣷⡘⢿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠟⢋⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣋⣴⡾⢫⣠⣾⣿⢿⠙⠀⠀⠈⠻⣿⣿⣿⣗⠘⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⣛⣥⣴⣦⡄⣻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠟⣩⣶⣿⣿⡟⣰⣿⠛⢿⠁⠀⠀⠀⠀⠀⠀⠀⠙⢿⢿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣡⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢛⣩⣶⣿⣿⣿⣿⣿⡇⣷⣷⣠⣶⡇⠀⠀⢀⠈⠀⠀⠀⠀��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢏⣼⣿⣿⡿⠙⠙⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣩⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⡜⢋⣥⣏⡀⠀⠀⠀⠀⠀⠈⠀��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡏⣼⡿⣿⣿⠀⠀⠀⠀⠀⢻⣿⣿⣿⣿⣯⢻⠟⣡⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣭⣭⣤⡄⠀⠀⠀⠀⠁��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⡏⠁⠀⢻⡆⠀⠀⠀⠀⠈⣿⣿⣿⣿⣿⠈⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣄⠀⠀⠀⠀��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⣇⣀⣤⣿⣿⣶⣶⣤⣴⣾⣿⣿⣿⣿⡏⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣤⣀⣠��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡆⣿⡿⠙⣿⠋⠛⠛⣿⡏⠉⠉⣿⣿⣿⡿⣡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⠹⢡⣏⣀⣀⣼⢹⣇⠀⣰⣿⡿⢋⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣌⠻⠿⠿⠿⠌⠿⠿⠟⣋⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣷⣾⣷⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿��[...]
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿��[...]
+                \$failedArt = @'
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠿⣛⣋⣭⣥⣶⣶⣶⣶⣶⣭⣭⣙⡻⠿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⢛⣥⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣬⣝⡻⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢋⣴⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣮⣙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢋⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣬⡻⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢋⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠿⢛⣛⠻⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣄⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢣⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣫⣶⣿⣿⣿⣿⣷⣦⣍⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⠹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢣⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣣⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣮⡻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⡘⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢋⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣄⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⠘⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⠹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⠹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡆⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢃⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠆⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠘⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢃⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡆⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠏⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠏⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢏⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢣⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠏⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⠁⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢞⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢋⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠁⠀⠀⠀⢀⠀⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⣿⣿⣿⣿⣿⣿⣿⣿⣿⢇⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢛⣩⣭⣵⣶⣶⣶⣶⣬⣭⣑⡘⠿⣿⣿⣿⣿⣿⣿⠿⠟⠴⠟⣛⣛⣛⣛⣋⣛⡛⠿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡏⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⡿⠿⠿⢿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢸⣿⣿⣿⣿⣿⣿⣿⣿⡟⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣩⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢋⣥⣴⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣬⡛⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠃⠀⠀⠐⠀⠁⠀⠂⠘⡩⡴⠶⠛⠋⠘⠉⠉⠉⢹⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⣿⣿⣿⣿⣿⣿⣿⣿⣿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢣⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⣿⣿⢏⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⡻⣿⣿⣿⣿⣿⣿⣿⢃⣠⣤⣬⣤⣤⣤⡡⡶⢛⢠⣶⣿⣧⡀⠀⠀⡀⠀⢸⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢠⣿⣿⣿⣿⣿⣿⣿⣿⡟⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣡⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢹⡿⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⡸⣿⣿⡏⣭⣭⣥⣾⣿⣿⣿⣿⣿⣿⢋⡄⡾⡿⠛⠻⣿⣿⣷⣤⣄⡀⠼⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢃⣾⣿⣿⣿⣿⣿⣿⣿⣿⢃⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⡌⣹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿      ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⣙⢿⠇⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡃⢢⣥⣿⣶⣿⣿⣿⣿⡿⠰⣷⣦⣭⡛⢿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢃⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⢸⣿⣿⣿⣿⣿⣿⣿⣿⡿⢋⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣿⣿⣷⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⡜⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣾⣿⣿⣿⣿⣿⣿⡿⢡⣯⣿⣿⠿⢛⣡
+⠟⠉⠀⠀⠀⠈⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣱⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡏⣾⣿⣿⣿⣿⣿⣿⣿⣿⣷⣤⡍⣨⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢱⣿⣿⣿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠏⣰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠟⠟⣡⣿⣿⣿⣿⣶⡍⢿
+⠀⠀⢀⠠⠀⠀⡀⠀⠉⠛⠿⣿⣿⣿⣿⣿⣿⡿⠟⣋⣥⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠁⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡏⣿⣿⣿⣿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⠸⣿⣿⣿⣿⣿⣿⣿⣿⢿⣿⡿⢛⠻⠿⠉⠀⠀⠀⠀⠀⠉⠻⡟⢡⣶⣶⣿
+⠀⠀⡀⠀⢀⠀⠀⠀⠀⠀⠀⠀⢩⣭⣭⣥⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⢿⣿⣿⣿⡼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⡘⢿⣿⣿⣿⣿⣿⠇⣌⡑⠡⣺⣿⠁⠀⠀⣖⣒⡦⡤⡄⠀⠁⣾⣿⣿⣿
+⠀⠀⠀⠄⠀⡀⠄⠀⠀⠀⠁⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠘⣺⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠏⣤⣾⣧⣽⣿⣿⡇⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢡⣾⣿⣿⣿⣿⣿⠀⢳⣿⣿⣿⣿⣷⣄⠀⠀⠉⠐⠓⠃⢀⣦⢻⣿⣿⣿
+⠀⠀⠁⢀⠀⠀⡀⠄⠀⠀⠀⠀⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⣫⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡏⡈⣿⣿⣿⣿⣿⣿⡇⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⣉⣙⠻⠟⣋⣉⣁⡓⠻⠿⣿⣿⡿⡉⠏⣉⣶⣶⣶⣶⣶⣿⠙⠓⢹⣿⣿
+⣷⣄⡀⠀⠠⠀⠀⢀⠀⠀⠠⠐⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢟⣋⣥⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⣇⣿⣿⣿⣿⣿⣿⡇⠈⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⡿⢋⣤⣾⣿⣿⣿⣿⣿⣦⠈⣿⣷⣿⣿⣾⣯⡈⢿⣿⣿⣿⣿⢏⣼⣿⣿
+⣿⣿⣿⣷⣦⣄⣈⠀⠀⠠⠀⢀⣾⣿⣿⣿⣿⣿⣿⣿⠿⢛⣫⣥⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⠡⣿⣿⣿⣿⣿⣿⠇⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⣤⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢿⣿⣿⣿⣿⣿⣿⣶⡦⠭⢉⣴⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣶⣦⣬⣭⣭⣭⣩⣭⣭⣥⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡌⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣌⡙⡛⢛⣛⣡⡄⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢡⣶⣤⣭⣭⣭⣭⣴⣶⣶⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⢸⣿⣿⣿⣦⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⢣⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡆⢿⡿⢟⣛⣫⣭⣿⣿⣭⣽⣛⡿⣿⡌⣿⣿⣿⣿⡈⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⣿⣿⣿⣿⣿⣿⣿⣿⡟⣡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣬⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣇⠻⣿⣿⣿⢀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢸⣹⣿⣿⣿⣿⣿⡿⢋⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢟⣵⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⣁⣉⣡⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⣎⣿⣿⣿⣿⡿⢛⣵⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢟⣥⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡄⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠿⠿⠿⢿⣿⣿⣿⣿⣿⣿⡏⣸⣿⡿⠟⣋⣵⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢟⣵⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠏⣃⡘⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣾⣿⣿⣿⠃⣛⣩⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢋⣵⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋⠁⢤⣼⣿⣇⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢋⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⠉⠀⠀⠀⠀⠈⣩⣴⡀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡌⠃⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣡⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⢛⣡⠦⠟⣃⠲⠀⠀⣴⣿⣿⣿⣷⡘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣇⢾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠟⢋⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣋⣴⡾⢫⣠⣾⣿⢿⠙⠀⠀⠈⠻⣿⣿⣿⣗⠘⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡘⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⣛⣥⣴⣦⡄⣻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠟⣩⣶⣿⣿⡟⣰⣿⠛⢿⠁⠀⠀⠀⠀⠀⠀⠀⠙⢿⢿⣦⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣡⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢛⣩⣶⣿⣿⣿⣿⣿⡇⣷⣷⣠⣶⡇⠀⠀⢀⠈⠀⠀⠀⠀⠠⢉⣰⡆⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡎⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢏⣼⣿⣿⡿⠙⠙⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣩⣶⣿⣿⣿⣿⣿⣿⣿⣿⣷⡜⢋⣥⣏⡀⠀⠀⠀⠀⠀⠈⠀⠀⠀⣿⣿⣿⡘⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡏⣼⡿⣿⣿⠀⠀⠀⠀⠀⢻⣿⣿⣿⣿⣯⢻⠟⣡⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣭⣭⣤⡄⠀⠀⠀⠀⠁⠀⠐⠀⣿⣿⣿⣧⢹⣿⣿⣿⣿⣿⠿⠿⠿⠿⢿⣿⣿⣿⣿⣿⡆⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⡏⠁⠀⢻⡆⠀⠀⠀⠀⠈⣿⣿⣿⣿⣿⠈⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣄⠀⠀⠀⠀⠀⠀⣴⣿⣿⣿⣿⡆⠿⠛⣋⣥⣴⣶⣿⣿⣿⣿⣿⣿⣿⣤⣍⢷⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⣇⣀⣤⣿⣿⣶⣶⣤⣴⣾⣿⣿⣿⣿⡏⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣤⣀⣠⣴⣿⣿⣿⣿⣿⣿⠇⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣆⠂⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡆⣿⡿⠙⠋⠛⠛⣿⡏⠉⠉⣿⣿⣿⡿⣡⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢀⣿⣿⣿⣿⠏⠀⠀⠉⠉⠙⠛⢿⣿⣿⣿⣿⡅⢺⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⠹⢡⣏⣀⣀⣼⢹⣇⠀⣰⣿⡿⢋⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⣿⣿⣿⣿⡀⠀⠀⠀⠀⠀⠀⠀⠙⣿⣿⣿⣿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣌⠻⠿⠿⠿⠌⠿⠿⠟⣋⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⣿⣿⠟⠙⢻⣦⣤⣄⣠⣤⣤⣴⣿⠿⣿⣿⣿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣷⣾⣷⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢿⣧⡀⣀⣼⠻⣿⠟⠓⢻⣿⡿⠁⠀⠈⣿⡿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡌⢿⣿⣿⡿⢸⣇⠀⠀⣸⡛⣷⣦⣤⣾⣿⠗⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⣙⠻⢣⣿⣿⣷⣿⣿⣧⠹⣿⠿⢛⣡⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⢬⣍⣉⣉⣉⡭⣴⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+
 '@
-Start-Sleep 4
+                Write-Host \$failedArt -ForegroundColor Magenta
                 
-                Write-Host `$overwhelmedArt -ForegroundColor Magenta
-                Write-Host
+                Write-Host 'Oof! >-< We tried everything we could! Sorry but here are the instructions to fix your PC!' -ForegroundColor White
+                Start-Sleep -Seconds 4
                 
-                # PHASE 6: USB Recovery Instructions
                 Write-Host '========================================================================' -ForegroundColor Magenta
                 Write-Host '1. Obtain a working USB Flash Drive (at least 8 GB).' -ForegroundColor White
                 Write-Host '2. Plug the USB flash drive into another working computer.' -ForegroundColor White
@@ -638,7 +468,52 @@ Start-Sleep 4
     Paw 'Startup Repair skipped. Your session is complete.' 'Cyan'
 }
 
+# Define wallpaper folder path
+$wallpaperFolder = Join-Path $env:USERPROFILE 'Pictures\FPD-Furry-Wallpapers'
 
+# Verify folder exists and contains valid images
+if (Test-Path -Path $wallpaperFolder) {
+    $images = Get-ChildItem -Path $wallpaperFolder -File | Where-Object { $_.Extension -match '^\.(jpg|jpeg|png|bmp)$' }
+    
+    if ($images.Count -gt 0) {
+        # Configure Windows Registry for Desktop Slideshow
+        $wallpaperKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers'
+        if (-not (Test-Path $wallpaperKey)) { New-Item -Path $wallpaperKey -Force | Out-Null }
+        
+        # Set Background Type to Slideshow (Value 2)
+        Set-ItemProperty -Path $wallpaperKey -Name BackgroundType -Value 2 -Type DWord
+        Set-ItemProperty -Path $wallpaperKey -Name SlideshowDirectoryPath -Value $wallpaperFolder -Type String
+
+        # Set Wallpaper Style to Fill ('10') and disable Tiling ('0')
+        $desktopKey = 'HKCU:\Control Panel\Desktop'
+        Set-ItemProperty -Path $desktopKey -Name WallpaperStyle -Value '10'
+        Set-ItemProperty -Path $desktopKey -Name TileWallpaper -Value '0'
+
+        # Set rotation interval (60000 ms = 1 minute)
+        Set-ItemProperty -Path 'HKCU:\Control Panel\Personalization\Desktop Slideshow' -Name Interval -Value 60000 -Type DWord -ErrorAction SilentlyContinue
+
+        # Apply immediate update via User32 API
+        $firstImage = $images[0].FullName
+        $code = @'
+using System;
+using System.Runtime.InteropServices;
+public class Wallpaper {
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+}
+'@
+        Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue
+        [Wallpaper]::SystemParametersInfo(20, 0, $firstImage, 3) | Out-Null
+
+        # Force Explorer to refresh system parameters
+        Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\rundll32.exe') -ArgumentList 'user32.dll,UpdatePerUserSystemParameters 1, True' -Wait -WindowStyle Hidden
+
+        Write-Host "Success! Desktop background set to slideshow from: $wallpaperFolder" -ForegroundColor Green
+    } else {
+        Write-Host "No valid images found in $wallpaperFolder. Make sure the images are downloaded first." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "Folder does not exist: $wallpaperFolder" -ForegroundColor Red
+}
 Start-Sleep -Seconds 2
-
-Exit 0
+exit 0
