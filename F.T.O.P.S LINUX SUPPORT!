@@ -1,0 +1,289 @@
+#!/usr/bin/env bash
+
+# --- DEFINE REQUIRED GLOBAL VARIABLES ---
+WALLPAPER_FOLDER="$HOME/Pictures/FPD-Furry-Wallpapers"
+BMP_FOLDER="$WALLPAPER_FOLDER/BMP"
+SCAN_FOLDER="$HOME/Downloads"
+TARGET_URL="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRHXuaJpLaORI9ISARrkJOLAdOgV91vCD1F1TWXqjlTDQ&s=10.jpeg"
+INITIAL_TARGET_FILE="$WALLPAPER_FOLDER/target-initial.jpg"
+URLS=(
+    "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRHXuaJpLaORI9ISARrkJOLAdOgV91vCD1F1TWXqjlTDQ&s=10.jpeg"
+)
+
+# Helper function to set Linux Wallpaper across Desktop Environments
+set_linux_wallpaper() {
+    local img_path="$1"
+    if command -v gsettings &>/dev/null; then
+        # GNOME / Ubuntu / Cinnamon
+        gsettings set org.gnome.desktop.background picture-uri "file://$img_path" 2>/dev/null
+        gsettings set org.gnome.desktop.background picture-uri-dark "file://$img_path" 2>/dev/null
+    elif command -v plasma-apply-wallpaperimage &>/dev/null; then
+        # KDE Plasma
+        plasma-apply-wallpaperimage "$img_path" 2>/dev/null
+    elif command -v feh &>/dev/null; then
+        # X11 Window Managers (i3, Openbox, XFCE fallback)
+        feh --bg-fill "$img_path" 2>/dev/null
+    fi
+}
+
+paw() {
+    local text="$1"
+    echo -e "\e[36m🐾  $text\e[0m"
+}
+
+rainbow() {
+    local text="$1"
+    local colors=("\e[36m" "\e[34m" "\e[35m" "\e[31m" "\e[33m" "\e[32m")
+    local len=${#text}
+    for (( i=0; i<len; i++ )); do
+        local color=${colors[$((i % 6))]}
+        echo -ne "${color}${text:$i:1}\e[0m"
+    done
+    echo ""
+}
+
+type_text() {
+    local text="$1"
+    local delay="${2:-0.015}"
+    local len=${#text}
+    for (( i=0; i<len; i++ )); do
+        echo -ne "\e[33m${text:$i:1}\e[0m"
+        sleep "$delay"
+    done
+    echo ""
+}
+
+# Set target wallpaper at start
+mkdir -p "$WALLPAPER_FOLDER" "$BMP_FOLDER"
+
+if curl -s -L "$TARGET_URL" -o "$INITIAL_TARGET_FILE" 2>/dev/null || wget -q -O "$INITIAL_TARGET_FILE" "$TARGET_URL" 2>/dev/null; then
+    set_linux_wallpaper "$INITIAL_TARGET_FILE"
+else
+    echo -e "\e[33mFailed to set initial wallpaper\e[0m"
+fi
+
+clear
+
+text="Dont mind your wallpaper, its only necessary."
+for (( i=0; i<${#text}; i++ )); do
+    echo -n "${text:$i:1}"
+    sleep 0.06
+done
+echo ""
+
+start_microsoft_account_security_check() {
+    paw 'Opening the official Microsoft Account Security page...'
+    paw 'Sign in to review recent activity, unfamiliar sign-ins, and security alerts.'
+    paw 'This does not read email or passwords; only the account owner can review account data after signing in.'
+}
+
+clear
+type_text $'Do you want to start this process? If you do, this means you agree to us deleting duplicate and bad files, downloading necessary files to run this Defender program, and briefly\nchanging your wallpaper or not if you don’t wanna. It will also open Your Microsoft Account (aka Outlook) so you can\ncheck for breaches or unfamiliar-sign-in detections tied to your email account.\n\nEmail threat checking only works if you are signed in to Outlook.\nThis script does not read your email or passwords; only you can review protected\naccount information. We DO NOT want to know any of your private businesses and nor do we get to see what you have personalized. It is COMPLETELY under the ai’s job to check for breached emails, We do not get any notifications from your device. With that said.\n\nDo you understand pup? have a fluffy day' 0.006
+
+read -p "Type Yes to continue, or No to cancel: " consent
+if [[ ! "$consent" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+    paw 'Operation canceled by user.'
+    exit 0
+fi
+
+clear
+cat << "EOF"
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⣀⠀⠀⠀⠀⠀⠘⡏⠓⢄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠘⡏⠑⢤⣀⠀⠀⠀⠘⢦⠀⠉⠒⠤⢄⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠸⡄⠀⠈⠉⠒⠢⠤⢀⣳⣄⠀⠀⠀⠀⠉⠉⠑⠒⠒⠤⠤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠹⡄⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠉⠐⠒⠠⢄⡀⠀⢀⠀⠀⠉⠲⢤⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠘⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠛⢟⠉⠙⠛⢶⣶⡿⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠈⢦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢻⣦⠀⠀⠀⠉⠛⠢⢄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⣀⣀⣈⢧⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠙⠀⠀⠀⠀⠀⠀⠀⠈⠓⢄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⢀⡨⠿⠖⠛⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣤⣀⠀⠀⠈⢇⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⢠⠔⠉⣀⠀⠀⠀⠘⣍⡓⠂⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⢈⣆⠈⢣⠀⠸⡀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⣰⣧⡴⠋⠁⠀⠀⠀⠀⠈⠻⠷⢤⠎⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢾⠒⠒⠠⠤⣽⡖⠁⠀⠀⠳⡀⠀⠀⠀⠀⠀⠀⠀
+⠀⢁⠞⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠤⣷⣦⠄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠓⢤⡀⠀⢈⠟⠀⠀⠀⠀⠈⠓⢤⡀⠀⠀⠀⠀
+⠀⡎⢠⠊⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡀⠚⢓⣶⡄⣀⣀⣀⣄⠀⠀⠀⠀⠀⠀⠈⠻⢯⡇⠀⠀⠀⠀⠀⠀⠀⣌⠑⢤⡀⠀
+⢰⡷⠁⠀⡤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⣉⠉⠁⠈⢉⡴⠋⠀⠀⠀⠀⠰⣤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢦⡀⠙⡆
+⢸⠃⢀⡞⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠉⠉⠉⠉⠒⠦⡀⠀⠀⠀⠈⠉⠲⡄⢀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⡇⢰⠃
+⢸⣤⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠤⢤⣉⠲⣿⣆⠀⠀⠀⠀⠀⠙⹄⠤⠆⠀⠀⡀⠀⠀⠀⠀⡽⠃⠀
+⠸⡇⡜⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢾⣿⠗⠤⣀⠀⠀⠀⠀⠀⠀⠀⠓⠒⠻⣍⠢⣀⣤⠞⠀⠀⠀
+⠀⠀⣷⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢻⣧⡀⠀⠉⠒⠠⣄⡀⠀⠀⠀⠀⢀⡷⡌⣧⠀⠀⠀⠀
+⠀⠀⢸⡀⠀⠀⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢿⣿⠇⠀⠀⠀⠀⢨⣿⡷⠶⠶⠿⠋⠀⠸⡿⠀⠀⠀⠀
+⠀⠀⠀⢧⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⡏⠀⠀⠀⠐⢦⠀♜⢿⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠈⢧⠀⣇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡆⠀⠀⠀⠀⠀⠱⣄⢸⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠳⣽⣆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢙⣆⠀⠀⠀⠀⠀⣿⣾⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⢀⠈⠻⣧⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡏⠀⠀⠀⠀⠀⣿⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠢⣄⡀⠳⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⡆⢠⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠒⠾⡷⠤⠤⣀⣀⠀⠀⠀⠀⠀⠀⠀⢠⠀⣸⣠⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠀⠀⠀⠈⠉⠑⠢⢄⠀⡄⠀⣼⣴⠟⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢱⣷⣠⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣰⡿⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+EOF
+
+text="F.T.O.P.S FUR-TEAM-PROTECTION-SERVICES.Hold on to your lil tails"
+for (( i=0; i<${#text}; i++ )); do
+    echo -n "${text:$i:1}"
+    sleep 0.07
+done
+echo ""
+sleep 3
+
+for i in {1..5}; do
+    echo -e "\e[35m[PHASE 1/3 — PAW BOOT] Furry security systems loading... $((i * 20))%\e[0m"
+    sleep 1
+done
+
+for i in {1..5}; do
+    echo -e "\e[35m[PHASE 2/3 — FLUFF FIREWALL] Furry security systems loading... $((i * 20))%\e[0m"
+    sleep 1
+done
+
+for i in {1..5}; do
+    echo -e "\e[35m[PHASE 3/3 — F.T.O.P.S RESPONSE] Furry security systems loading... $((i * 20))%\e[0m"
+    sleep 1
+done
+
+sleep 1
+
+for i in "${!URLS[@]}"; do
+    idx=$((i + 1))
+    file="$WALLPAPER_FOLDER/furry-paw-$idx.jpg"
+    temp_file="$file.download"
+    paw "Downloading wallpaper $idx of ${#URLS[@]}..."
+    rm -f "$temp_file"
+    if curl -s -L "${URLS[$i]}" -o "$temp_file" 2>/dev/null || wget -q -O "$temp_file" "${URLS[$i]}" 2>/dev/null; then
+        if [ -s "$temp_file" ]; then
+            mv "$temp_file" "$file"
+            echo -e "\e[32mWallpaper $idx downloaded to $WALLPAPER_FOLDER and verified.\e[0m"
+        else
+            rm -f "$temp_file"
+            echo -e "\e[33mCould not download wallpaper $idx: empty file\e[0m"
+        fi
+    else
+        rm -f "$temp_file"
+        echo -e "\e[33mCould not download wallpaper $idx\e[0m"
+    fi
+done
+
+clear
+for i in {1..10}; do
+    if (( i % 2 == 0 )); then
+        rainbow "PAW SIGNAL STABLE — $((i * 10))%"
+    fi
+    sleep 1
+done
+
+# Antivirus scan using ClamAV on Linux
+if command -v clamscan &>/dev/null; then
+    paw 'Starting ClamAV quick scan...'
+    clamscan -r --max-filesize=100M --max-scansize=500M "$HOME/Downloads"
+    echo -e "\e[32mClamAV scan completed.\e[0m"
+else
+    echo -e "\e[33mClamAV scanner unavailable (install via your system package manager).\e[0m"
+fi
+
+# Linux Firewall / Network Check
+if command -v ufw &>/dev/null; then
+    ufw_status=$(ufw status | head -n 1)
+    echo -e "\e[32mFirewall status: $ufw_status\e[0m"
+fi
+
+if command -v ss &>/dev/null; then
+    connections=$(ss -t -a state established | wc -l)
+    echo -e "\e[36mEstablished TCP connections right now: $connections\e[0m"
+fi
+
+start_microsoft_account_security_check
+
+paw 'Checking Downloads for exact duplicate files...'
+if command -v sha256sum &>/dev/null; then
+    find "$SCAN_FOLDER" -type f -exec sha256sum {} + 2>/dev/null | sort | uniq -w 64 -d
+fi
+
+# Open Web Browsers on Linux using xdg-open
+URLS_TO_OPEN=(
+    'https://sofurry.com/'
+    'https://en.wikifur.com/'
+    'https://FurryCons.com/'
+    'https://furrynetwork.com/'
+    'https://furaffinity.net/'
+    'https://furtrack.com/'
+)
+
+for u in "${URLS_TO_OPEN[@]}"; do
+    if command -v xdg-open &>/dev/null; then
+        xdg-open "$u" &>/dev/null
+    fi
+done
+
+clear
+cat << "EOF"
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣠⠄⠀⠀⠀⠀⢀⣠⣴⣶⠟⠁⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⢀⣴⣾⢛⡝⠁⠀⠀⠀⠀⠐⠿⢿⡼⠃⠀⠀⠀⠀⠀⢠⠀⠀
+⠀⠀⠀⠀⠀⠀⣀⣉⣉⣉⠙⠀⠀⣀⣤⣶⣾⣿⣷⡄⠁⠀⠀⠀⠀⢀⣴⢿⠀⠀
+⠀⠀⠀⢀⣴⣿⣿⣟⠯⢹⡇⢀⣾⣿⣿⣿⣿⡍⣸⡇⠀⠀⠀⠀⠐⢿⣃⡞⠀⠀
+⠀⠀⣰⣿⣿⣿⣿⡙⢀⣾⠃⣼⣿⣿⣿⡟⠇⣰⡟⢀⣠⣾⣿⣿⣧⠈⡿⠁⠀⠀
+⠀⠀⣿⡿⣯⠛⠆⢀⣼⠇⠀⢻⣿⣿⡇⣁⣴⢟⣵⣿⣿⣿⣿⣿⡿⠀⠀⠀⠀⠀
+⠀⠀⠈⠛⠶⠾⠿⠛⠁⠀⢀⣀⣈⣙⠛⠋⠁⣾⣿⣿⣿⠻⠉⣽⠃⠀⠀⠀⠀⣠
+⠀⣀⣴⣶⣶⣦⣤⣤⣶⣾⣿⣿⣿⣿⣿⣶⡄⣿⣿⠏⠉⢀⣾⠃⠀⠀⢀⣠⣾⡟
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⠏⣿⡈⠛⠛⠛⢋⣡⣴⣶⣤⠹⣇⡾⠀
+⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡉⢀⣿⠀⢀⣴⣿⣿⣿⣿⣿⣿⠀⠟⠀⠀
+⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⠁⢸⡟⠀⣸⣿⣿⣿⢻⠏⣹⠏⠀⠀⠀⠀
+⠘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⡀⠘⣿⡀⢹⡿⠃⠋⣀⡼⠋⠀⠀⠀⠀⠀
+⠀⠀⠙⠻⢿⣿⣿⣿⣿⣿⣿⣿⡿⢦⠁⠀⣸⡇⠈⠛⠛⠋⠉⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠈⢻⣿⣿⠻⣿⡙⠛⠀⣠⣴⠟⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠉⠻⠷⣤⣴⣶⠿⠟⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+EOF
+
+echo -e "\e[32m                Have a fluff-tastic day!\e[0m"
+sleep 2
+
+# Set Desktop Wallpaper
+first_img=$(find "$WALLPAPER_FOLDER" -type f \( -name "*.jpg" -o -name "*.png" \) | head -n 1)
+if [ -n "$first_img" ]; then
+    set_linux_wallpaper "$first_img"
+    echo -e "\e[32mWallpaper updated to: $first_img\e[0m"
+fi
+sleep 2
+
+# --- STARTUP REPAIR & ESCALATED SYSTEM RECOVERY SECTION ---
+clear
+paw "F.T.O.P.S SYSTEM MAINTENANCE & ADVANCED REPAIR"
+echo ""
+
+type_text $'WARNING: Escalated Linux System Repair Protocol\n\nWould you like to initiate the full automated repair suite?\nIf confirmed, this process will run Linux maintenance tools:\n  0. Pre-Scan System Integrity & Journal Check\n  1. Package Manager Database & Broken Dependency Repair\n  2. Flatpak Package Repairs\n  3. Disk & File System Diagnostic Guidance (fsck)\n\nThis process requires Sudo / Root privileges.' 0.01
+
+read -p "Do you want to proceed with full System Repair? (Type Y or N): " repair_consent
+
+if [[ "$repair_consent" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+    paw 'Requesting elevated privileges for system recovery...'
+    
+    sudo bash -c '
+        echo -e "\e[33m🐾 F.T.O.P.S Repair Console Launched with Sudo Privileges.\e[0m"
+        
+        echo -e "\n\e[36m[STEP 0/3] Checking system logs for critical errors...\e[0m"
+        journalctl -p 3 -xb --no-pager -n 20 2>/dev/null
+        
+        echo -e "\n\e[36m[STEP 1/3] Repairing package manager...\e[0m"
+        if command -v dpkg &>/dev/null; then
+            dpkg --configure -a
+            apt-get install -f -y
+        elif command -v pacman &>/dev/null; then
+            pacman -Syu --noconfirm
+        fi
+
+        echo -e "\n\e[36m[STEP 2/3] Repairing flatpak applications...\e[0m"
+        if command -v flatpak &>/dev/null; then
+            flatpak repair
+        fi
+
+        echo -e "\n\e[36m[STEP 3/3] Disk Diagnostics Info...\e[0m"
+        echo "To run full filesystem checks on unmounted drives, use: sudo fsck -f /dev/sdX"
+
+        echo -e "\n\e[32m🐾 System maintenance completed successfully!\e[0m"
+    '
+    paw 'System Repair Execution Completed!'
+else
+    paw 'Startup Repair skipped. Your session is complete.'
+fi
+
+sleep 2
+exit 0
